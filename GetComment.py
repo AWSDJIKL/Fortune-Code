@@ -96,6 +96,12 @@ def get_proxy_ip(num):
 
 
 def change_browser_proxy(browser):
+    '''
+    为浏览器更换新的代理IP
+
+    :param browser: 原来的浏览器
+    :return: 新的浏览器
+    '''
     # 先把原来的浏览器关了
     browser.quit()
     # 从隧道代理ip池中获取一个新的代理
@@ -134,6 +140,14 @@ def get_new_browser(proxy=None):
 
 
 def find_elements_by_xpath(browser, xpath, url):
+    '''
+    根据xpath寻找元素
+
+    :param browser: 浏览器
+    :param xpath: xpath
+    :param url: 元素所在的页面网址，找不到的时候更换代理刷新再找一次
+    :return: 符合条件的元素列表
+    '''
     n = 10
     while n > 0:
         try:
@@ -150,6 +164,14 @@ def find_elements_by_xpath(browser, xpath, url):
 
 
 def find_element_by_xpath(browser, xpath, url):
+    '''
+    根据xpath寻找元素
+
+    :param browser: 浏览器
+    :param xpath: xpath
+    :param url: 元素所在的页面网址，找不到的时候更换代理刷新再找一次
+    :return: 符合条件的元素
+    '''
     n = 10
     while n > 0:
         try:
@@ -170,9 +192,11 @@ def get_stock_all_post_url(home_url, stock_name, star_date=None, end_date=None):
     '''
     获取一支股票的所有帖子的网址
 
-    :param browser:
-    :param home_url:
-    :return:
+    :param home_url: 该股票的股吧首页
+    :param stock_name: 股票的股吧名字（用于检查是否被封IP）
+    :param star_date: 起始时间（默认没有，则获取到最旧的帖子）
+    :param end_date: 终止时间（默认没有，则获取到最新的帖子）
+    :return: 所有帖子的url
     '''
     browser = get_new_browser()
     # 从第一页开始爬取，记录当前爬取的帖子的年份
@@ -277,6 +301,13 @@ def get_stock_all_post_url(home_url, stock_name, star_date=None, end_date=None):
 
 
 def get_post_text(post_home_url, save_path):
+    '''
+    获取帖子里的内容
+
+    :param post_home_url: 帖子的首页
+    :param save_path: 内容的保存路径
+    :return:
+    '''
     browser = get_new_browser()
     browser = get_url_html(browser, post_home_url)
     # 先确定帖子的发帖时间
@@ -329,6 +360,12 @@ def get_post_text(post_home_url, save_path):
 
 
 def get_post_time(post_url):
+    '''
+    获取帖子的发帖时间
+
+    :param post_url: 帖子的首页
+    :return: 发帖时间
+    '''
     browser = get_new_browser()
     browser = get_url_html(browser, post_url)
     try:
@@ -357,9 +394,9 @@ def get_post_content(browser, post_url):
     '''
     获取帖子主楼的内容
 
-    :param browser:
-    :param post_url:
-    :return:
+    :param browser: 浏览器
+    :param post_url: 帖子的首页
+    :return: 浏览器，主楼内容（作者，发表时间，内容，点赞数）
     '''
     browser = get_url_html(browser, post_url)
     result = ""
@@ -390,19 +427,27 @@ def get_post_content(browser, post_url):
         browser, author = find_element_by_xpath(browser, "//div[@id=\"zwconttbn\"]/strong/a/font", post_url)
         browser, publish_time = find_element_by_xpath(browser, "//div[@class=\"zwfbtime\"]", post_url)
         # browser, title = find_element_by_xpath(browser, "//div[@id=\"zwconttbt\"]", post_url)
-        browser, content = find_element_by_xpath(browser, "//div[@id=\"zwconbody\"]", post_url)
+        browser, content = find_element_by_xpath(browser, "//div[@id=\"zwconbody\" or @class=\"zwcontentmain\"]",
+                                                 post_url)
         browser, like_num = find_element_by_xpath(browser, "//div[@id=\"zwcontent\"]/div[3]/div[1]/span", post_url)
         author = author.text
         publish_time = publish_time.text[4:23]
         # title = title.text
         content = content.text.replace("\n", "").replace("\r", "").replace("\t", "")
-        like_num = int(like_num.text)
+        like_num = int(like_num.text) if like_num.text != "点赞" else 0  # 如果是里面的内容是点赞，说明没人赞
         # result = "{}\t{}\t{}\t{}".format(author, publish_time, title, content)
         result = "{}\t{}\t{}\t{}".format(author, publish_time, content, like_num)
     return browser, result
 
 
 def get_post_comment(browser, post_url):
+    '''
+    获取帖子的全部评论（目前仅能获取一级评论）
+
+    :param browser: 浏览器
+    :param post_url: 帖子首页
+    :return: 浏览器，所有评论（作者，发表时间，内容，点赞数）
+    '''
     browser = get_url_html(browser, post_url)
     result = []
     # 获取一级评论
@@ -442,40 +487,59 @@ def get_post_comment(browser, post_url):
     return browser, result
 
 
-if __name__ == '__main__':
-    # with open("stock_list.txt", "r", encoding='utf-8') as file:
-    #     lines = file.readlines()
-    # for i in range(len(lines)):
-    #     lines[i] = lines[i][:-1]
-    # stock_name_list = lines[::2]
-    # stock_url_list = lines[1::2]
-    # for stock_url, stock_name in zip(stock_url_list, stock_name_list):
-    #     all_post_url = get_stock_all_post_url(stock_url, stock_name, datetime(2019, 11, 30), datetime(2020, 10, 31))
-    #     print("共收集到{}个帖子url".format(len(all_post_url)))
-    #     # # 记录下来
-    #     save_path = "stock_comment"
-    #     if not os.path.exists(save_path):
-    #         os.makedirs(save_path)
-    #     with open(os.path.join(save_path, stock_name + "_post_url.txt"), "w", encoding='utf-8') as file:
-    #         for post_url in all_post_url:
-    #             # print(post_url)
-    #             file.write(post_url + "\n")
-    # print("done")
+def get_url_main():
+    '''
+    获取帖子网址的主函数
 
-    # post_url = "https://guba.eastmoney.com/news,002340,1015174863.html"
-    # post_url = "http://guba.eastmoney.com/news,usaapl,1015191566.html"
-    # post_url = "http://guba.eastmoney.com/fangtan/detail?id=1014932674&code=gssz"
-    with open("stock_comment/格林美吧_post_url.txt", "r", encoding="utf-8") as file:
+    :return:
+    '''
+    with open("stock_list.txt", "r", encoding='utf-8') as file:
         lines = file.readlines()
-        count = 0
-        for line in lines:
-            line = line.split("\t")
-            post_url = line[1].strip()
-            # print(post_url)
-            file_name = str(count) + ".txt"
-            save_path = "stock_comment/002340"
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            file_path = os.path.join(save_path, file_name)
-            get_post_text(post_url, file_path)
-            count += 1
+    for i in range(len(lines)):
+        lines[i] = lines[i][:-1]
+    stock_name_list = lines[::2]
+    stock_url_list = lines[1::2]
+    for stock_url, stock_name in zip(stock_url_list, stock_name_list):
+        all_post_url = get_stock_all_post_url(stock_url, stock_name, datetime(2019, 11, 30), datetime(2020, 10, 31))
+        print("共收集到{}个帖子url".format(len(all_post_url)))
+        # # 记录下来
+        save_path = "stock_post_url"
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        with open(os.path.join(save_path, stock_name + "_post_url.txt"), "w", encoding='utf-8') as file:
+            for post_url in all_post_url:
+                # print(post_url)
+                file.write(post_url + "\n")
+    print("done")
+
+
+def get_post_text_main():
+    '''
+    获取帖子内容的主函数
+
+    :return:
+    '''
+    post_url_file_list = []
+    for filename in os.listdir("stock_post_url"):
+        if "_post_url" in filename:
+            post_url_file_list.append(os.path.join("stock_post_url", filename))
+    for post_url_file in post_url_file_list:
+        with open(post_url_file, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+            count = 0
+            for line in lines[:-1]:  # 最后一行是总结信息
+                line = line.split("\t")
+                post_url = line[1].strip()
+                # print(post_url)
+                file_name = str(count) + ".txt"
+                save_path = os.path.join("stock_comment", post_url_file[:-13])
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                file_path = os.path.join(save_path, file_name)
+                get_post_text(post_url, file_path)
+                count += 1
+
+
+if __name__ == '__main__':
+    # get_url_main()
+    get_post_text_main()
