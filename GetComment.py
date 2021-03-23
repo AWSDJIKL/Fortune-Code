@@ -5,7 +5,7 @@
 # @Time : 2021/3/19 15:46
 # @Author : LINYANZHEN
 # @File : GetComment.py
-
+import threading
 import re
 import requests
 import math
@@ -321,6 +321,8 @@ def get_post_text(post_home_url, save_path):
     elif "fangtan" in post_home_url or "gssz" in post_home_url:
         # 是访谈
         return None
+    # 爬取一定有的主楼内容
+    browser, post_content = get_post_content(browser, post_home_url)
     # 一般帖子
     # 3种模式，没有评论的，有评论但只够1页的，有多页评论的
     # 先判断是哪种模式
@@ -348,8 +350,6 @@ def get_post_text(post_home_url, save_path):
                 browser, comment = get_post_comment(browser, page_url)
                 all_comment.extend(comment)
 
-    # 最后爬取一定有的主楼内容
-    browser, post_content = get_post_content(browser, post_home_url)
     # 最后汇总输出到文件中
     with open(os.path.join(save_path), "w", encoding='utf-8') as file:
         file.write(post_content + "\n")
@@ -398,7 +398,7 @@ def get_post_content(browser, post_url):
     :param post_url: 帖子的首页
     :return: 浏览器，主楼内容（作者，发表时间，内容，点赞数）
     '''
-    browser = get_url_html(browser, post_url)
+    # browser = get_url_html(browser, post_url)
     result = ""
     if "//caifuhao." in post_url:
         # 是财富号的内容
@@ -471,7 +471,7 @@ def get_post_comment(browser, post_url):
         time.sleep(3)
         # 重新获取评论正文
         browser, comment_content_element = find_element_by_xpath(browser, now_level1_item + "/div[3]/div[1]", post_url)
-        print(comment_content_element.text)
+        # print(comment_content_element.text)
         if comment_content_element.text == "抱歉！内容已删除":
             # 评论已被删除，跳过
             continue
@@ -523,21 +523,57 @@ def get_post_text_main():
     for filename in os.listdir("stock_post_url"):
         if "_post_url" in filename:
             post_url_file_list.append(os.path.join("stock_post_url", filename))
+
     for post_url_file in post_url_file_list:
         with open(post_url_file, "r", encoding="utf-8") as file:
-            lines = file.readlines()
+            lines = file.readlines()[:-1]
+            for i in range(len(lines)):
+                lines[i] = lines[i].split("\t")[1].strip()
             count = 0
-            for line in lines[:-1]:  # 最后一行是总结信息
-                line = line.split("\t")
-                post_url = line[1].strip()
-                # print(post_url)
-                file_name = str(count) + ".txt"
-                save_path = os.path.join("stock_comment", os.path.split(post_url_file)[1][:-13])
-                if not os.path.exists(save_path):
-                    os.makedirs(save_path)
-                file_path = os.path.join(save_path, file_name)
+            thread_num = 6
+            thread_pool = []
+            save_path = os.path.join("stock_comment", os.path.split(post_url_file)[1][:-13])
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            # 尝试多线程
+            thread1 = threading.Thread(target=get_post_text_thread, args=(save_path, 0, lines[:int(len(lines) / 2)],))
+            thread2 = threading.Thread(target=get_post_text_thread,
+                                       args=(save_path, int(len(lines) / 2), lines[int(len(lines) / 2):],))
+            for i in range(thread_num - 1):
+                start_num = math.ceil(len(lines) / thread_num) * i
+                end_num = math.ceil(len(lines) / thread_num) * (i + 1)
+                thread = threading.Thread(target=get_post_text_thread,
+                                          args=(save_path, start_num, lines[start_num:end_num],))
+                thread_pool.append(thread)
+            thread_pool.append(threading.Thread(target=get_post_text_thread,
+                                                args=(
+                                                    save_path,
+                                                    math.ceil(len(lines) / thread_num) * (thread_num - 1),
+                                                    lines[
+                                                    math.ceil(len(lines) / thread_num) * (thread_num - 1):],)))
+            for t in thread_pool:
+                t.start()
+            for t in thread_pool:
+                t.join()
+
+def get_post_text_thread(save_path, count_start, post_url_list):
+    count = count_start
+    # print(post_url_list)
+    for post_url in post_url_list:
+        file_name = str(count) + ".txt"
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        file_path = os.path.join(save_path, file_name)
+        try_count = 5
+        while try_count > 0:
+            try:
                 get_post_text(post_url, file_path)
-                count += 1
+                break
+            except Exception as e:
+                print(e)
+                try_count -= 1
+                # 试5次不行就放弃这个帖子
+        count += 1
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@
 import selenium
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+import math
 
 # 不是所有“点击查看全部”都能点，只有那些有剩余评论且剩余评论不为0的才能点
 # browser, check_all_elements = find_elements_by_xpath(browser,
@@ -80,13 +81,10 @@ from selenium.webdriver.chrome.options import Options
 #     # for i in range(len(comment_elements)):
 #     #     pass
 # browser.quit()
-exe_path = "chromedriver.exe"
-chrom_options = Options()
-chrom_options.add_argument("--headless")
-chrom_options.add_argument("--disable-gpu")
-browser = webdriver.Chrome(executable_path=exe_path, chrome_options=chrom_options)
-browser1 = webdriver.Chrome(executable_path=exe_path, chrome_options=chrom_options)
-browser2 = webdriver.Chrome(executable_path=exe_path, chrome_options=chrom_options)
-browser.quit()
-browser1.quit()
-browser2.quit()
+
+l1 = [0, 1, 2, 3, 4]
+l2=[5,6,7,8,9]
+l=list(zip(l1,l2))
+print(list(map(list, zip(l1, l2))))
+
+
