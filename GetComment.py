@@ -532,7 +532,7 @@ def get_post_text_main():
                 post_url = line[1].strip()
                 # print(post_url)
                 file_name = str(count) + ".txt"
-                save_path = os.path.join("stock_comment", post_url_file[:-13])
+                save_path = os.path.join("stock_comment", os.path.split(post_url_file)[1][:-13])
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
                 file_path = os.path.join(save_path, file_name)
