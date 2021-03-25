@@ -91,6 +91,14 @@ def get_proxy_ip(num):
     tunnel_ip_url = "http://http.tiqu.letecs.com/getip3?num={}&type=1&pro=&city=0&yys=0&port=1&time=1&ts=0&ys=0&cs=0&lb=4&sb=0&pb=45&mr=1&regions=".format(
         num)
     r = requests.get(tunnel_ip_url)
+    ip_r = re.compile("(?<=白名单).*(?=\",)")
+    ip = ip_r.findall(r.text)
+    if len(ip) > 0:
+        ip = ip[0]
+        add_to_white_list = "http://wapi.http.linkudp.com/index/index/save_white?neek=361904&appkey=7e7d931277f1eedaa6694d327338c54d&white=" + ip
+        r = requests.get(add_to_white_list)
+        time.sleep(10)
+        r = requests.get(tunnel_ip_url)
     ip_port_list = r.text.split("\n")
     return ip_port_list
 
@@ -148,7 +156,7 @@ def find_elements_by_xpath(browser, xpath, url):
     :param url: 元素所在的页面网址，找不到的时候更换代理刷新再找一次
     :return: 符合条件的元素列表
     '''
-    n = 10
+    n = 3
     while n > 0:
         try:
             elements = browser.find_elements_by_xpath(xpath)
@@ -172,7 +180,7 @@ def find_element_by_xpath(browser, xpath, url):
     :param url: 元素所在的页面网址，找不到的时候更换代理刷新再找一次
     :return: 符合条件的元素
     '''
-    n = 10
+    n = 3
     while n > 0:
         try:
             element = browser.find_element_by_xpath(xpath)
@@ -300,7 +308,19 @@ def get_stock_all_post_url(home_url, stock_name, star_date=None, end_date=None):
     return all_post_url
 
 
-def get_post_text(post_home_url, save_path):
+def get_post_author(browser, post_url):
+    try:
+        # browser, title = find_element_by_xpath(browser, "//div[@id=\"zwconttbt\"]", post_url)
+        browser, author = find_element_by_xpath(browser, "//div[@id=\"zwconttbn\"]/strong/a/font", post_url)
+        if not author:
+            return browser, None
+        return browser, author.text
+    except Exception as e:
+        print(e)
+        return browser, None
+
+
+def get_post_text(post_home_url, post_author, save_path):
     '''
     获取帖子里的内容
 
@@ -308,22 +328,40 @@ def get_post_text(post_home_url, save_path):
     :param save_path: 内容的保存路径
     :return:
     '''
-    browser = get_new_browser()
-    browser = get_url_html(browser, post_home_url)
-    # 先确定帖子的发帖时间
-    post_time = get_post_time(post_home_url)
-    if not post_time:
-        # 获取时间失败，大概率帖子被删，放弃
-        return None
+
+    # # 先确定帖子的发帖时间
+    # post_time = get_post_time(post_home_url)
+    # if not post_time:
+    #     # 获取时间失败，大概率帖子被删，放弃
+    #     return
     if "caifuhao" in post_home_url:
         # 是财富号的内容
-        return None
+        return
     elif "fangtan" in post_home_url or "gssz" in post_home_url:
         # 是访谈
-        return None
-    # 爬取一定有的主楼内容
+        return
+    elif "detail" in post_home_url or "qa" in post_home_url:
+        # 是悬赏问答
+        return
+        # 一般帖子
+        # # 确认作者，如果对不上，则判断IP被封
+        # browser, author = get_post_author(browser, post_home_url)
+        # if not author:
+        #     # 获取作者失败，放弃这个帖子
+        #     return
+        # elif post_author[:-1] not in author:
+        #     # 作者对不上，IP被封，换IP重试
+        #     print("作者对不上，IP被封，换IP重试")
+        #     browser = change_browser_proxy(browser)
+        #     retry_count -= 1
+        # else:
+        #     break
+    browser = get_new_browser()
+    retry_count = 1
+    # while retry_count > 0:
+    browser = get_url_html(browser, post_home_url)
+    # 先爬取一定有的主楼内容
     browser, post_content = get_post_content(browser, post_home_url)
-    # 一般帖子
     # 3种模式，没有评论的，有评论但只够1页的，有多页评论的
     # 先判断是哪种模式
     # 确定有多少评论
@@ -471,7 +509,7 @@ def get_post_comment(browser, post_url):
         time.sleep(3)
         # 重新获取评论正文
         browser, comment_content_element = find_element_by_xpath(browser, now_level1_item + "/div[3]/div[1]", post_url)
-        # print(comment_content_element.text)
+        print(comment_content_element.text)
         if comment_content_element.text == "抱歉！内容已删除":
             # 评论已被删除，跳过
             continue
@@ -527,52 +565,82 @@ def get_post_text_main():
     for post_url_file in post_url_file_list:
         with open(post_url_file, "r", encoding="utf-8") as file:
             lines = file.readlines()[:-1]
-            for i in range(len(lines)):
-                lines[i] = lines[i].split("\t")[1].strip()
+            url_list = []
+            author_list = []
+            for line in lines:
+                url_list.append(line.split("\t")[1].strip())
+                author_list.append(line.split("\t")[3])
+            # for i in range(len(lines)):
+            #     lines[i] = lines[i].split("\t")[1].strip()
             count = 0
-            thread_num = 6
+            thread_num = 5  # 线程太多速度太快，ip消耗大
             thread_pool = []
-            save_path = os.path.join("stock_comment", os.path.split(post_url_file)[1][:-13])
+            save_path = os.path.join("stock_comment", os.path.split(post_url_file)[1][:-4])
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             # 尝试多线程
-            thread1 = threading.Thread(target=get_post_text_thread, args=(save_path, 0, lines[:int(len(lines) / 2)],))
-            thread2 = threading.Thread(target=get_post_text_thread,
-                                       args=(save_path, int(len(lines) / 2), lines[int(len(lines) / 2):],))
             for i in range(thread_num - 1):
                 start_num = math.ceil(len(lines) / thread_num) * i
                 end_num = math.ceil(len(lines) / thread_num) * (i + 1)
                 thread = threading.Thread(target=get_post_text_thread,
-                                          args=(save_path, start_num, lines[start_num:end_num],))
+                                          args=(save_path, start_num, url_list[start_num:end_num],
+                                                author_list[start_num:end_num],))
                 thread_pool.append(thread)
             thread_pool.append(threading.Thread(target=get_post_text_thread,
                                                 args=(
                                                     save_path,
                                                     math.ceil(len(lines) / thread_num) * (thread_num - 1),
-                                                    lines[
-                                                    math.ceil(len(lines) / thread_num) * (thread_num - 1):],)))
+                                                    url_list[
+                                                    math.ceil(len(lines) / thread_num) * (thread_num - 1):],
+                                                    author_list[
+                                                    math.ceil(
+                                                        len(
+                                                            lines) / thread_num) * (
+                                                            thread_num - 1):],)))
             for t in thread_pool:
                 t.start()
             for t in thread_pool:
                 t.join()
+            # for line in lines[:-1]:  # 最后一行是总结信息
+            #     line = line.split("\t")
+            #     post_url = line[1].strip()
+            #     # print(post_url)
+            #     file_name = str(count) + ".txt"
+            #
+            #     file_path = os.path.join(save_path, file_name)
+            #     try_count = 5
+            #     while try_count > 0:
+            #         try:
+            #             get_post_text(post_url, file_path)
+            #         except Exception as e:
+            #             print(e)
+            #             try_count -= 1
+            #             # 试5次不行就放弃这个帖子
+            #     count += 1
 
-def get_post_text_thread(save_path, count_start, post_url_list):
+
+def get_post_text_thread(save_path, count_start, post_url_list, author_list):
     count = count_start
     # print(post_url_list)
-    for post_url in post_url_list:
+    for post_url, post_author in zip(post_url_list, author_list):
         file_name = str(count) + ".txt"
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         file_path = os.path.join(save_path, file_name)
-        try_count = 5
-        while try_count > 0:
-            try:
-                get_post_text(post_url, file_path)
-                break
-            except Exception as e:
-                print(e)
-                try_count -= 1
-                # 试5次不行就放弃这个帖子
+        if os.path.exists(file_path):
+            # 已经爬过了
+            print(file_name + "已经爬过了")
+            count += 1
+            continue
+        # try_count = 5
+        # while try_count > 0:
+        try:
+            get_post_text(post_url, post_author, file_path)
+            # break
+        except Exception as e:
+            print(e)
+            # try_count -= 1
+            # 试5次不行就放弃这个帖子
         count += 1
 
 
