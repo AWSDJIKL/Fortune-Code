@@ -9,6 +9,14 @@ import selenium
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import math
+from snownlp import SnowNLP
+import os
+import math
+import pandas
+import numpy as np
+import csv
+import datetime
+import matplotlib.pyplot as plt
 
 # 不是所有“点击查看全部”都能点，只有那些有剩余评论且剩余评论不为0的才能点
 # browser, check_all_elements = find_elements_by_xpath(browser,
@@ -82,9 +90,95 @@ import math
 #     #     pass
 # browser.quit()
 
-l1 = [0, 1, 2, 3, 4]
-l2=[5,6,7,8,9]
-l=list(zip(l1,l2))
-print(list(map(list, zip(l1, l2))))
 
+# def quantilizeSentiments(data,date):
+#     pos=neg=0
+#     print(len(data[date]))
+#     for comment in data[date]:
+#         try:#受到snownlp中算法限制，这里可能会因为出现了snownlp中没有的词而报错，所以添加了try-except语句
+#             nlp = SnowNLP(comment['comment'])
+#             sentimentScore = nlp.sentiments
+#         except:
+#             print(traceback.format_exc())
+#             continue
+#         if(sentimentScore>0.6):
+#             fans=SQL.selectFansByUserId(comment['user_id'])
+#             pos+=1+math.log(comment['like_count']+fans[0][0]+1,2)
+#         if(sentimentScore<0.4):
+#             fans=SQL.selectFansByUserId(comment['user_id'])
+#             neg+=1+math.log(comment['like_count']+fans[0][0]+1,2)
+#     print("负："+str(neg)+"  正："+str(pos))
+#     return (pos/(pos+neg+0.0001)-0.5)*math.log(len(data[date])+1,2)
 
+# df = pandas.DataFrame([[1, 2, 3], [4, 5, 6]])
+# df.columns = ["a", "b", "c"]
+# b = df["b"]
+# for i in range(len(b)):
+#     b[i] = 0
+# print(df)
+
+# path = "comment/analyzed/stock_GLMcomments_analyzed.csv"
+path = "comment/analyzed/stock_SFcomments_analyzed.csv"
+# new_path = "comment/analyzed/stock_GLMcomments_analyzed_sort.csv"
+new_path = "comment/analyzed/stock_SFcomments_analyzed_sort.csv"
+data = pandas.read_csv(path)
+# data.columns = ['用户名', '评论时间', '评论内容', '点赞数', "snow评分"]
+time = data["评论时间"]
+for i in range(len(time)):
+    time[i] = time[i][:10]
+# print(time)
+time = set(data["评论时间"].tolist())
+# print(time)
+df = pandas.DataFrame(columns=["date", "sum"])
+count = 0
+for t in time:
+    d = data[data["评论时间"] == t]
+    sum = 0
+    pos = 0
+    neg = 0
+    for i in d.values:
+        if i[4] == 1:
+            # pos += 1 + math.log(i[3] + 1, 2)
+            pos += i[3] + 1
+        else:
+            # neg += 1 + math.log(i[3] + 1, 2)
+            neg += i[3] + 1
+    # sum = (pos / (pos + neg + 0.0001) - 0.5) * math.log(len(d.values) + 1, 2)
+    sum = np.log(1.0 * (1 + pos) / (1 + neg))
+    #     sum += (i[3] + 1) * i[4]
+    # sum /= len(d.values)
+    df.loc[count] = {"date": t, "sum": sum}
+    count += 1
+print(df)
+df = df.sort_values(by="date")
+print(df)
+# 创建一个新txt文件存放获取的所有评论以及分数
+with open(new_path, 'w', encoding='utf-8', newline="")as f:
+    csv_writer = csv.writer(f)
+    # csv_writer.writerow(['用户名', '评论时间', '评论内容', '点赞数'])
+    for i in df.values:
+        # print(i)
+        csv_writer.writerow(i)
+
+data = pandas.read_csv(new_path, header=None)
+data.columns = ["date", "sum"]
+datestart = "2019-11-30"
+dateend = "2021-03-12"
+
+datestart = datetime.datetime.strptime(datestart, '%Y-%m-%d')
+dateend = datetime.datetime.strptime(dateend, '%Y-%m-%d')
+date_list = []
+date_list.append(datestart.strftime('%Y-%m-%d'))
+while datestart < dateend:
+    # 日期叠加一天
+    datestart += datetime.timedelta(days=+1)
+    # 日期转字符串存入列表
+    date_list.append(datestart.strftime('%Y-%m-%d'))
+score_list = []
+for d in date_list:
+    if d in data["date"].tolist():
+        score_list.append(data[data["date"] == d]["sum"])
+    else:
+        score_list.append(score_list[-1])
+plt.plot(date_list, score_list, "b")
+plt.show()
